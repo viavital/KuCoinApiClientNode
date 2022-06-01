@@ -1,0 +1,23 @@
+{
+  "name": "kucoinapi",
+  "version": "1.0.0",
+  "description": "rewrited KuCoinApiClient on NodeJs +TS",
+  "main": "main.js",
+  "dependencies": {
+    "typescript": "^4.7.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viavital/KuCoinApiClientNode.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/viavital/KuCoinApiClientNode/issues"
+  },
+  "homepage": "https://github.com/viavital/KuCoinApiClientNode#readme"
+}
