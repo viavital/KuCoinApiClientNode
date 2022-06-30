@@ -12,7 +12,7 @@ export class SupportPriceService {
 	tradeSymbol: string;
 	marketSnapshot?: marketSnapshotType;
 	bufferOfChanges: any[];
-	isBufferFilled: boolean;
+	isFetchingSnapshot: boolean;
 	events: EventEmitter;
 	ws?: WebSocket;
 	changesAcceptorService: ChangesAcceptorService;
@@ -21,7 +21,7 @@ export class SupportPriceService {
 
 	constructor(tradeSymbol: string) {
 		this.tradeSymbol = tradeSymbol;
-		this.isBufferFilled = false;
+		this.isFetchingSnapshot = false;
 		this.bufferOfChanges = new Array<any>();
 		this.events = new EventEmitter();
 		this.changesAcceptorService = new ChangesAcceptorService();
@@ -77,19 +77,25 @@ export class SupportPriceService {
 			resolve();
 		}			
 		if (data !== null && data !== undefined && data.toString().includes('ack')) {
-			this.makeSnapshot(this.tradeSymbol).then(
-				(value) => {
-					this.marketSnapshot  = value;
-				},
-				() => 'rejected fetch',
-			);
-			
+			console.log("received ack");
 		}
 		if (data !== null && data !== undefined && data.toString().includes('trade.l2update')) {
 			this.bufferOfChanges.push(JSON.parse(data.toString()));
+			if (!this.isFetchingSnapshot && this.marketSnapshot === undefined) {
+				this.isFetchingSnapshot = true;
+				this.makeSnapshot(this.tradeSymbol).then(
+					(value) => {
+						this.marketSnapshot  = value;
+					},
+					() => this.isFetchingSnapshot = false,
+				);
+			}
 			if(this.bufferOfChanges.length >=300){
 				if (this.marketSnapshot != undefined) {
-					this.marketSnapshot = this.changesAcceptorService.AcceptChanges(this.marketSnapshot, this.bufferOfChanges);
+					this.marketSnapshot = this.changesAcceptorService.acceptChanges(this.marketSnapshot, this.bufferOfChanges);
+					if(this.marketSnapshot === undefined){
+						this.isFetchingSnapshot = false;
+					}
 					this.bufferOfChanges = new Array<any>();
 				}
 			}		

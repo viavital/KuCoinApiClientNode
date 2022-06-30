@@ -2,26 +2,29 @@ import { changesType, marketSnapshotType } from "../Models/Types";
 
 export class ChangesAcceptorService {
 
-	public AcceptChanges(marketSnapshot: marketSnapshotType, bufferOfChanges: changesType[]): marketSnapshotType {
+	public acceptChanges(marketSnapshot: marketSnapshotType, bufferOfChanges: changesType[]): marketSnapshotType | undefined {
 	
 		for (const notation of bufferOfChanges) {
 			if (notation.data.sequenceEnd >= Number(marketSnapshot.data.sequence)) {
+				if ((notation.data.sequenceStart - Number(marketSnapshot.data.sequence)) > 1) {
+					return undefined;
+				}
 				if (notation.data.changes.bids.length > 0){
-					this.UpdatePrice(notation.data.changes.bids, marketSnapshot.data.bids);
+					this.updatePrice(notation.data.changes.bids, marketSnapshot.data.bids);
 				}
 
 				if (notation.data.changes.asks.length > 0){
-					this.UpdatePrice(notation.data.changes.asks, marketSnapshot.data.asks);
+					this.updatePrice(notation.data.changes.asks, marketSnapshot.data.asks);
 				}
 				marketSnapshot.data.sequence = notation.data.sequenceEnd.toString();
 			}
 		}
-		marketSnapshot.data.asks = this.FormatSnapshot(marketSnapshot.data.asks, "asks");
-		marketSnapshot.data.bids = this.FormatSnapshot(marketSnapshot.data.bids, "bids");
+		marketSnapshot.data.asks = this.formatSnapshot(marketSnapshot.data.asks, "asks");
+		marketSnapshot.data.bids = this.formatSnapshot(marketSnapshot.data.bids, "bids");
 		return marketSnapshot;
 	}
 
-	private UpdatePrice(PriceArray: string[][], SnapshotPricesArr : string[][]) {
+	private updatePrice(PriceArray: string[][], SnapshotPricesArr : string[][]) {
 		for (const change of PriceArray) {
 			if (change[0] !== '0') {
 				const changingPrice: string[] | undefined = SnapshotPricesArr.find(
@@ -37,7 +40,7 @@ export class ChangesAcceptorService {
 			}
 		}
 	}
-	private FormatSnapshot(PriceArray: string[][], sortingPrices: string): string[][] {
+	private formatSnapshot(PriceArray: string[][], sortingPrices: string): string[][] {
 		if (sortingPrices === "asks") {
 			return PriceArray.filter( u => u[1] != "0").sort(function (a,b) {return Number(a[0]) - Number(b[0])}).slice(0,20);
 		}
@@ -45,7 +48,7 @@ export class ChangesAcceptorService {
 			return PriceArray.filter( u => u[1] != "0").sort(function (a,b) {return Number(b[0]) - Number(a[0])}).slice(0,20);
 		}
 		else
-		console.log("error in FormatSnapshot function [ChangesAcceptorService.FormatSnapshot()...]");
+		console.log("error in formatSnapshot function [ChangesAcceptorService.formatSnapshot()...]");
 		return PriceArray;
 	}
 }
