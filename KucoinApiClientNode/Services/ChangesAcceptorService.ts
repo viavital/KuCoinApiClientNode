@@ -2,9 +2,9 @@ import { changesType, marketSnapshotType } from "../Models/Types";
 
 export class ChangesAcceptorService {
 
-	public acceptChanges(marketSnapshot: marketSnapshotType, bufferOfChanges: changesType[]): marketSnapshotType | undefined {
+	public acceptChanges(marketSnapshot: marketSnapshotType, bufferOfChanges: Map<number, changesType>): marketSnapshotType | undefined {
 	
-		for (const notation of bufferOfChanges) {
+		for (const notation of bufferOfChanges.values()) {
 			if (notation.data.sequenceEnd >= Number(marketSnapshot.data.sequence)) {
 				if ((notation.data.sequenceStart - Number(marketSnapshot.data.sequence)) > 1) {
 					return undefined;

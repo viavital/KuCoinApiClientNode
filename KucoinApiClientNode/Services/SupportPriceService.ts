@@ -4,25 +4,27 @@ import { SubscriptionMessageModel } from '../Models/SubscriptionMessModel.js';
 import { WelcomeMessageModel } from '../Models/WelcomeMessageModel';
 import { ChangesAcceptorService } from '../Services/ChangesAcceptorService.js';
 import EventEmitter from 'events';
-import { marketSnapshotType } from '../Models/Types.js';
+import { changesType, marketSnapshotType } from '../Models/Types.js';
 import { resolve } from 'path';
+import { PingMessage } from '../Models/pingMessageModel.js';
  
 
 export class SupportPriceService {
 	tradeSymbol: string;
 	marketSnapshot?: marketSnapshotType;
-	bufferOfChanges: any[];
+	bufferOfChanges: Map<number, changesType>;
 	isFetchingSnapshot: boolean;
 	events: EventEmitter;
 	ws?: WebSocket;
 	changesAcceptorService: ChangesAcceptorService;
+	pingInterval?: number;
 	readonly preparationTcs: Promise<boolean>;
 	private preparationTcsResult?: (data: boolean) => void;
 
 	constructor(tradeSymbol: string) {
 		this.tradeSymbol = tradeSymbol;
 		this.isFetchingSnapshot = false;
-		this.bufferOfChanges = new Array<any>();
+		this.bufferOfChanges = new Map();
 		this.events = new EventEmitter();
 		this.changesAcceptorService = new ChangesAcceptorService();
 		this.preparationTcs = new Promise<boolean>((resolve) => {this.preparationTcsResult = resolve});
@@ -34,6 +36,9 @@ export class SupportPriceService {
 		this.ws = new WebSocket(connectionStringToWebsocket);
 		this.ws.on('open', () => {
 			console.log('connected to websocket');
+			setInterval(() =>{
+				this.pingPongWebsocket();
+			}, this.pingInterval);
 		});
 		this.ws.on('message', this.wsMessageHandler);
 		this.ws.on('close', () =>{
@@ -58,6 +63,8 @@ export class SupportPriceService {
 		const token: string = data.data.token;
 		const instanceServers: string = data.data.instanceServers[0].endpoint;
 		console.log('received token' + token);
+		this.pingInterval = data.data.instanceServers[0].pingInterval;
+		console.log("ping interval for Websocket needs to be ", this.pingInterval); 
 		return instanceServers + '?token=' + token;
 	}
 
@@ -79,8 +86,12 @@ export class SupportPriceService {
 		if (data !== null && data !== undefined && data.toString().includes('ack')) {
 			console.log("received ack");
 		}
+		if (data !== null && data !== undefined && data.toString().includes('pong')) {
+			console.log("received pong");
+		}
 		if (data !== null && data !== undefined && data.toString().includes('trade.l2update')) {
-			this.bufferOfChanges.push(JSON.parse(data.toString()));
+			const dataParsed = JSON.parse(data.toString());
+			this.bufferOfChanges.set(dataParsed.data.sequenceStart, dataParsed);
 			if (!this.isFetchingSnapshot && this.marketSnapshot === undefined) {
 				this.isFetchingSnapshot = true;
 				this.makeSnapshot(this.tradeSymbol).then(
@@ -90,13 +101,13 @@ export class SupportPriceService {
 					() => this.isFetchingSnapshot = false,
 				);
 			}
-			if(this.bufferOfChanges.length >=300){
+			if(this.bufferOfChanges.size >=300){
 				if (this.marketSnapshot != undefined) {
 					this.marketSnapshot = this.changesAcceptorService.acceptChanges(this.marketSnapshot, this.bufferOfChanges);
 					if(this.marketSnapshot === undefined){
 						this.isFetchingSnapshot = false;
 					}
-					this.bufferOfChanges = new Array<any>();
+					this.bufferOfChanges = new Map();
 				}
 			}		
 		}
@@ -109,6 +120,14 @@ export class SupportPriceService {
 			const responseMarketSnapshotJson = await responseMarketSnapshot.json();			
 			resolve(responseMarketSnapshotJson as marketSnapshotType);
 	});		
+
+	private pingPongWebsocket() {
+			if (!this.ws) return;
+			if (this.ws.readyState !== 1) return;
+			const pingMess = new PingMessage();
+			console.log("sending ping messsge with id - ", JSON.stringify(pingMess));
+			this.ws.send(JSON.stringify(pingMess));			
+	}
 }
 
 	 
