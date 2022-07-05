@@ -1,22 +1,35 @@
 import http, { STATUS_CODES } from 'http';
-import { resolve } from 'path';
 import { marketSnapshotType } from './Models/Types.js';
 import { SupportPriceService } from './Services/SupportPriceService.js';
+import winston, { level } from 'winston';
+import { getDateTimeNow } from './Models/dateTimeModel.js';
+import fs from 'fs'
+
 
 export class App {
 	port: number;
 	tradeSymbol: string;
 	supportPriceService: SupportPriceService;
+	logger: winston.Logger;
 
 	constructor(tradeSymbol: string) {
+		this.clearLogger();
 		this.port = 8000;
 		this.tradeSymbol = tradeSymbol;
-		this.supportPriceService = new SupportPriceService(tradeSymbol);
-	}
+		this.logger = winston.createLogger({
+			transports: [
+			  new winston.transports.Console(),
+			  new winston.transports.File({ filename: './loggerStorage/error.log', level: 'error'}),
+			  new winston.transports.File({ filename: './loggerStorage/app.loggerInfo.log' }),
+			  new winston.transports.File({ filename: './loggerStorage/app.loggerdebug.log', level: 'debug' }),
+			  
+			]
+		  });
+		this.supportPriceService = new SupportPriceService(tradeSymbol, this.logger);		
+	};
 
-	public async Init(): Promise<void> {
-		
-		const IsDisconnected = this.supportPriceService.supportPrice(); // todo must work withoun awaiting this method
+	public async Init(): Promise<void> {	
+		const IsDisconnected = this.supportPriceService.supportPrice(); 
 		http
 			.createServer(async (request, response) => {
 				response.setHeader('Content-Type', 'text/html');
@@ -28,11 +41,11 @@ export class App {
 							response.write('there was no responce from KuCoin server with token');
 						}
 						if (this.CheckIsShitHappen(snapshot)){
-							console.log("Occured mistake in Accepting changes");
+							this.logger.error(getDateTimeNow() + "shit happen in counting snapshot - check your function \'acceptChanges\'");							
 						}
 
 						const result = `Best bid price = ${snapshot.data.bids[0][0]} best ask price = ${snapshot.data.asks[0][0]}`;
-						console.log(result);
+						this.logger.info(getDateTimeNow() + result);
 						response.write(result);
 					}
 				} else {
@@ -41,13 +54,28 @@ export class App {
 				response.end();
 			})
 			.listen(this.port);
-		console.log('Server started at http://localhost:8000');
-	}
+		this.logger.info(getDateTimeNow()  + " Server started at http://localhost:8000");		
+	};
 
-	CheckIsShitHappen(marketSnapshot: marketSnapshotType): boolean{
+	private CheckIsShitHappen(marketSnapshot: marketSnapshotType): boolean{
 		if (Number(marketSnapshot.data.asks[0][0]) > Number(marketSnapshot.data.bids[0][0]) ) {
 			return false;
 		}
 		return true;
-	}
+	};
+
+	private clearLogger() {
+		fs.unlink('./loggerStorage/app.loggerInfo.log', (err) => {
+         	if (err) console.log(err);
+		});
+		fs.unlink('./loggerStorage/error.log', (err) => {
+			if (err) console.log(err);			
+	    });
+	    fs.unlink('./loggerStorage/app.loggerdebug.log', (err) => {
+		if (err) console.log(err)
+		else console.log('logger.log is clear');
+  		}		
+	)};
 }
+
+

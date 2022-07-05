@@ -5,8 +5,9 @@ import { WelcomeMessageModel } from '../Models/WelcomeMessageModel';
 import { ChangesAcceptorService } from '../Services/ChangesAcceptorService.js';
 import EventEmitter from 'events';
 import { changesType, marketSnapshotType } from '../Models/Types.js';
-import { resolve } from 'path';
 import { PingMessage } from '../Models/pingMessageModel.js';
+import winston from 'winston';
+import { getDateTimeNow } from '../Models/dateTimeModel.js';
  
 
 export class SupportPriceService {
@@ -20,14 +21,16 @@ export class SupportPriceService {
 	pingInterval?: number;
 	readonly preparationTcs: Promise<boolean>;
 	private preparationTcsResult?: (data: boolean) => void;
+	logger: winston.Logger;
 
-	constructor(tradeSymbol: string) {
+	constructor(tradeSymbol: string, logger : winston.Logger) {
 		this.tradeSymbol = tradeSymbol;
 		this.isFetchingSnapshot = false;
 		this.bufferOfChanges = new Map();
 		this.events = new EventEmitter();
 		this.changesAcceptorService = new ChangesAcceptorService();
 		this.preparationTcs = new Promise<boolean>((resolve) => {this.preparationTcsResult = resolve});
+		this.logger = logger;
 	}
 
 	public async supportPrice(): Promise<boolean> {
@@ -35,14 +38,14 @@ export class SupportPriceService {
 		const connectionStringToWebsocket: string = await this.getConnectionStringWebSocket();		
 		this.ws = new WebSocket(connectionStringToWebsocket);
 		this.ws.on('open', () => {
-			console.log('connected to websocket');
+			this.logger.info(getDateTimeNow()  + ' connected to websocket');			
 			setInterval(() =>{
 				this.pingPongWebsocket();
 			}, this.pingInterval);
 		});
 		this.ws.on('message', this.wsMessageHandler);
 		this.ws.on('close', () =>{
-			console.log("socket disconnected");
+			this.logger.info(getDateTimeNow() + ' socket disconnected');			
 			if (this.preparationTcsResult != undefined){
 				this.preparationTcsResult(true);
 			}				
@@ -62,32 +65,31 @@ export class SupportPriceService {
 		const data: any = await responseKucoinTokenMessage.json();
 		const token: string = data.data.token;
 		const instanceServers: string = data.data.instanceServers[0].endpoint;
-		console.log('received token' + token);
+		this.logger.debug(getDateTimeNow() + ' received token' + token);		
 		this.pingInterval = data.data.instanceServers[0].pingInterval;
-		console.log("ping interval for Websocket needs to be ", this.pingInterval); 
+		this.logger.debug(getDateTimeNow() + " ping interval for Websocket needs to be " + this.pingInterval);		
 		return instanceServers + '?token=' + token;
 	}
 
 	private wsMessageHandler = (data: Data): Promise<void> => { return new Promise<void>((resolve) => {	
 			if (data !== null && data !== undefined && data.toString().includes('welcome')) {
 			const welcomeMess: WelcomeMessageModel = JSON.parse(data.toString());
-			console.log('received Welcome message from Websocket');
-			const subscriptionMessage = new SubscriptionMessageModel(this.tradeSymbol);
-			console.log('created and sent sunscription message');
-			const subscriptionMessageJS = JSON.stringify(subscriptionMessage);
-			console.log(subscriptionMessage);
+			this.logger.debug(getDateTimeNow() + " received Welcome message from Websocket ");			
+			const subscriptionMessage = new SubscriptionMessageModel(this.tradeSymbol);						
+			const subscriptionMessageJS = JSON.stringify(subscriptionMessage);		
+			this.logger.debug(getDateTimeNow() + " created and sent sunscription message " + subscriptionMessageJS);	
 			if (this.ws != undefined) {
 				this.ws.send(subscriptionMessageJS);
 			}
 			else
-			console.log('error - websocket is undefined')
+			this.logger.error(getDateTimeNow() + " websocket is undefined ");			
 			resolve();
 		}			
 		if (data !== null && data !== undefined && data.toString().includes('ack')) {
-			console.log("received ack");
+			this.logger.debug(getDateTimeNow() + " received ack ");
 		}
 		if (data !== null && data !== undefined && data.toString().includes('pong')) {
-			console.log("received pong");
+			this.logger.debug(getDateTimeNow() + " received pong");			
 		}
 		if (data !== null && data !== undefined && data.toString().includes('trade.l2update')) {
 			const dataParsed = JSON.parse(data.toString());
@@ -125,7 +127,7 @@ export class SupportPriceService {
 			if (!this.ws) return;
 			if (this.ws.readyState !== 1) return;
 			const pingMess = new PingMessage();
-			console.log("sending ping messsge with id - ", JSON.stringify(pingMess));
+			this.logger.debug(getDateTimeNow() + " sending ping messsge with id - " + JSON.stringify(pingMess));			
 			this.ws.send(JSON.stringify(pingMess));			
 	}
 }
